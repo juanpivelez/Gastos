@@ -51,21 +51,21 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
 <nav><button data-v="c" class="on">Cargar</button><button data-v="h">Historial</button><button data-v="r">Resumen</button><button data-v="x">Ajustes</button></nav>
 <script>
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let H=L('h',[]),cfg=L('cfg',{}),cats=L('cats',{gastos:[],ganancias:[]}),R=L('r',null),tipo='gasto',M=L('m',null),rt='gastos',rcat=null;
+let H=L('h',[]),cfg=L('cfg',{}),cats=L('cats',{gastos:[],ganancias:[]}),R=L('r',null),tipo='gasto',M=L('m',null),rt='gastos',rcat=null,LM=L('lm',0);
 const fm=n=>(+n||0).toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:2});
 const hoy=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const toast=t=>{const e=$('#toast');e.textContent=t;e.style.opacity=1;setTimeout(()=>e.style.opacity=0,2200)};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function nav(v){document.querySelectorAll('.v').forEach(e=>e.classList.toggle('on',e.id=='v-'+v));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==v));if(v=='h')rH();if(v=='r')rR()}
+function nav(v){document.querySelectorAll('.v').forEach(e=>e.classList.toggle('on',e.id=='v-'+v));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==v));if(v=='h')rH();if(v=='r'){rR();cargar()}}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.v));
 function setTipo(t){tipo=t;$('#tg').classList.toggle('on',t=='gasto');$('#tn').classList.toggle('on',t=='ganancia');rC()}
 $('#tg').onclick=()=>setTipo('gasto');$('#tn').onclick=()=>setTipo('ganancia');
 function rC(){const l=(tipo=='gasto'?cats.gastos:cats.ganancias);const cur=$('#c').value;$('#c').innerHTML='<option value="" selected disabled>Elegí una categoría</option>'+l.map(c=>`<option>${esc(c)}</option>`).join('');if(l.includes(cur))$('#c').value=cur;
  const p=H.filter(e=>e.s=='p').length;$('#st').textContent=!cfg.url?'Falta configurar en Ajustes':p?`⏳ ${p} pendiente(s) de enviar`:'✓ Todo enviado'}
 async function api(b){const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({...b,t:cfg.t})});return r.json()}
-async function cargar(){if(!cfg.url||!navigator.onLine)return;try{const r=await(await fetch(cfg.url+'?t='+encodeURIComponent(cfg.t))).json();if(r.ok){R=r.r;cats={gastos:R.gastos.cats.map(c=>c.n),ganancias:R.ganancias.cats.map(c=>c.n)};S('r',R);S('cats',cats);M=r.m;S('m',M);rC();rR()}else toast(r.error)}catch(e){}}
+async function cargar(){if(!cfg.url||!navigator.onLine)return;const t0=Date.now();try{const r=await(await fetch(cfg.url+'?t='+encodeURIComponent(cfg.t))).json();if(r.ok){R=r.r;cats={gastos:R.gastos.cats.map(c=>c.n),ganancias:R.ganancias.cats.map(c=>c.n)};S('r',R);S('cats',cats);M=r.m;S('m',M);LM=t0;S('lm',LM);rC();rR()}else toast(r.error)}catch(e){}}
 let busy=0;async function sync(){if(busy||!cfg.url||!navigator.onLine)return;busy=1;
- try{for(const e of H.filter(e=>e.s=='p')){const r=await api({a:'agregar',id:e.id,tipo:e.tipo,fecha:e.f,monto:e.m,desc:e.d,cat:e.c});if(r.ok){e.s='ok';S('h',H)}else{toast(r.error||'Error al enviar');break}}await cargar()}catch(e){}
+ try{for(;;){const e=[...H].reverse().find(x=>x.s=='p');if(!e)break;const r=await api({a:'agregar',id:e.id,tipo:e.tipo,fecha:e.f,monto:e.m,desc:e.d,cat:e.c});if(r.ok){e.s='ok';e.ts=Date.now();S('h',H);rC();rH()}else{toast(r.error||'Error al enviar');break}}}catch(x){}
  busy=0;rC();rH()}
 $('#sv').onclick=()=>{const m=parseFloat($('#m').value.replace(',','.')),c=$('#c').value;if(!m||!c){toast('Completá monto y categoría');return}
  H.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),tipo,f:$('#f').value||hoy(),m,d:$('#d').value.trim(),c,s:'p'});S('h',H);
@@ -76,7 +76,7 @@ async function borrar(id){const e=H.find(x=>x.id==id);if(!e||!confirm('¿Borrar 
  if(e.s=='ok'){if(!navigator.onLine||!cfg.url){toast('Necesitás internet para borrarlo de la hoja');return}try{const r=await api({a:'borrar',tipo:e.tipo,monto:e.m,desc:e.d,cat:e.c});if(!r.ok){toast('No se encontró en la hoja del mes actual');return}}catch(x){toast('Error de conexión');return}}
  H=H.filter(x=>x.id!=id);S('h',H);rH();rC();cargar()}
 const fd=f=>f?f.split('-').reverse().slice(0,2).join('/'):'sin fecha';
-function movs(t,cat){const g=t=='gastos',base=((M&&M[g?0:1])||[]).filter(x=>x.c==cat).reverse(),pen=H.filter(e=>e.s=='p'&&e.tipo==(g?'gasto':'ganancia')&&e.c==cat).map(e=>({f:e.f,m:e.m,d:e.d,w:1}));return[...pen,...base]}
+function movs(t,cat){const g=t=='gastos',base=((M&&M[g?0:1])||[]).filter(x=>x.c==cat).reverse(),pen=H.filter(e=>(e.s=='p'||(e.ts&&e.ts>LM))&&e.tipo==(g?'gasto':'ganancia')&&e.c==cat).map(e=>({f:e.f,m:e.m,d:e.d,w:e.s=='p'?1:0}));return[...pen,...base]}
 function rtab(t){rt=t;rcat=null;rR()}
 function rcatTog(i){const n=(rt=='gastos'?R.gastos:R.ganancias).cats[i].n;rcat=rcat==n?null:n;rR()}
 function rR(){if(!R){$('#rs').innerHTML='<div class="card mut">Sincronizá con internet al menos una vez.</div>';return}
