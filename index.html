@@ -24,6 +24,10 @@ nav button{border:0;background:none;margin:0;padding:10px 0;font-size:13px;color
 .bar{height:6px;background:#334155;border-radius:3px;margin-top:5px}.bar i{display:block;height:100%;background:var(--ac);border-radius:3px}
 #toast{position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#fff;color:#000;padding:10px 16px;border-radius:20px;opacity:0;transition:.3s;pointer-events:none;z-index:9}
 .v{display:none}.v.on{display:block}
+input,select{height:50px}
+input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+.mv{display:flex;justify-content:space-between;gap:10px;padding:8px 0 0;font-size:14px}
 </style></head><body>
 <div id="toast"></div>
 <main>
@@ -47,7 +51,7 @@ nav button{border:0;background:none;margin:0;padding:10px 0;font-size:13px;color
 <nav><button data-v="c" class="on">Cargar</button><button data-v="h">Historial</button><button data-v="r">Resumen</button><button data-v="x">Ajustes</button></nav>
 <script>
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let H=L('h',[]),cfg=L('cfg',{}),cats=L('cats',{gastos:[],ganancias:[]}),R=L('r',null),tipo='gasto';
+let H=L('h',[]),cfg=L('cfg',{}),cats=L('cats',{gastos:[],ganancias:[]}),R=L('r',null),tipo='gasto',M=L('m',null),rt='gastos',rcat=null;
 const fm=n=>(+n||0).toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:2});
 const hoy=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const toast=t=>{const e=$('#toast');e.textContent=t;e.style.opacity=1;setTimeout(()=>e.style.opacity=0,2200)};
@@ -56,24 +60,29 @@ function nav(v){document.querySelectorAll('.v').forEach(e=>e.classList.toggle('o
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.v));
 function setTipo(t){tipo=t;$('#tg').classList.toggle('on',t=='gasto');$('#tn').classList.toggle('on',t=='ganancia');rC()}
 $('#tg').onclick=()=>setTipo('gasto');$('#tn').onclick=()=>setTipo('ganancia');
-function rC(){const l=(tipo=='gasto'?cats.gastos:cats.ganancias);$('#c').innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')||'<option value="">(sin categorías: sincronizá)</option>';
+function rC(){const l=(tipo=='gasto'?cats.gastos:cats.ganancias);const cur=$('#c').value;$('#c').innerHTML='<option value="" selected disabled>Elegí una categoría</option>'+l.map(c=>`<option>${esc(c)}</option>`).join('');if(l.includes(cur))$('#c').value=cur;
  const p=H.filter(e=>e.s=='p').length;$('#st').textContent=!cfg.url?'Falta configurar en Ajustes':p?`⏳ ${p} pendiente(s) de enviar`:'✓ Todo enviado'}
 async function api(b){const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({...b,t:cfg.t})});return r.json()}
-async function cargar(){if(!cfg.url||!navigator.onLine)return;try{const r=await(await fetch(cfg.url+'?t='+encodeURIComponent(cfg.t))).json();if(r.ok){R=r.r;cats={gastos:R.gastos.cats.map(c=>c.n),ganancias:R.ganancias.cats.map(c=>c.n)};S('r',R);S('cats',cats);rC()}else toast(r.error)}catch(e){}}
+async function cargar(){if(!cfg.url||!navigator.onLine)return;try{const r=await(await fetch(cfg.url+'?t='+encodeURIComponent(cfg.t))).json();if(r.ok){R=r.r;cats={gastos:R.gastos.cats.map(c=>c.n),ganancias:R.ganancias.cats.map(c=>c.n)};S('r',R);S('cats',cats);M=r.m;S('m',M);rC();rR()}else toast(r.error)}catch(e){}}
 let busy=0;async function sync(){if(busy||!cfg.url||!navigator.onLine)return;busy=1;
  try{for(const e of H.filter(e=>e.s=='p')){const r=await api({a:'agregar',id:e.id,tipo:e.tipo,fecha:e.f,monto:e.m,desc:e.d,cat:e.c});if(r.ok){e.s='ok';S('h',H)}else{toast(r.error||'Error al enviar');break}}await cargar()}catch(e){}
  busy=0;rC();rH()}
 $('#sv').onclick=()=>{const m=parseFloat($('#m').value.replace(',','.')),c=$('#c').value;if(!m||!c){toast('Completá monto y categoría');return}
  H.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),tipo,f:$('#f').value||hoy(),m,d:$('#d').value.trim(),c,s:'p'});S('h',H);
- $('#m').value='';$('#d').value='';$('#f').value=hoy();toast('Guardado');rC();sync()};
+ $('#m').value='';$('#d').value='';$('#c').value='';$('#f').value=hoy();toast('Guardado');rC();sync()};
 function rH(){$('#hl').innerHTML=H.length?H.map(e=>`<div class="row" data-id="${e.id}"><div><b class="${e.tipo=='gasto'?'neg':'pos'}">${e.tipo=='gasto'?'−':'+'}${fm(e.m)}</b> ${e.s=='p'?'⏳':'✓'}<div class="mut">${esc(e.c)} · ${esc(e.d)}</div></div><div class="mut">${e.f.split('-').reverse().join('/')}</div></div>`).join(''):'<div class="mut">Todavía no cargaste nada.</div>';
  document.querySelectorAll('#hl .row').forEach(r=>r.onclick=()=>borrar(r.dataset.id))}
 async function borrar(id){const e=H.find(x=>x.id==id);if(!e||!confirm('¿Borrar este movimiento?'))return;
  if(e.s=='ok'){if(!navigator.onLine||!cfg.url){toast('Necesitás internet para borrarlo de la hoja');return}try{const r=await api({a:'borrar',tipo:e.tipo,monto:e.m,desc:e.d,cat:e.c});if(!r.ok){toast('No se encontró en la hoja del mes actual');return}}catch(x){toast('Error de conexión');return}}
  H=H.filter(x=>x.id!=id);S('h',H);rH();rC();cargar()}
-function bloque(t,o,cl){const p=o.p||1;return `<div class="card"><b>${t}</b> <span class="mut">${fm(o.r)} de ${fm(o.p)}</span>${o.cats.map(c=>`<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>${esc(c.n)}</span><span>${fm(c.r)}</span></div><div class="mut">previsto ${fm(c.p)}</div><div class="bar"><i style="width:${Math.min(100,c.p?c.r/c.p*100:(c.r?100:0))}%"></i></div></div>`).join('')}</div>`}
+const fd=f=>f?f.split('-').reverse().slice(0,2).join('/'):'sin fecha';
+function movs(t,cat){const g=t=='gastos',base=((M&&M[g?0:1])||[]).filter(x=>x.c==cat).reverse(),pen=H.filter(e=>e.s=='p'&&e.tipo==(g?'gasto':'ganancia')&&e.c==cat).map(e=>({f:e.f,m:e.m,d:e.d,w:1}));return[...pen,...base]}
+function rtab(t){rt=t;rcat=null;rR()}
+function rcatTog(i){const n=(rt=='gastos'?R.gastos:R.ganancias).cats[i].n;rcat=rcat==n?null:n;rR()}
 function rR(){if(!R){$('#rs').innerHTML='<div class="card mut">Sincronizá con internet al menos una vez.</div>';return}
- $('#rs').innerHTML=`<div class="card"><div class="mut">${esc(R.mes)} · saldo actual</div><div class="big ${R.final<0?'neg':'pos'}">${fm(R.final)}</div><div class="mut">Saldo inicial ${fm(R.inicial)}</div></div>`+bloque('Gastos',R.gastos)+bloque('Ganancias',R.ganancias);}
+ const o=rt=='gastos'?R.gastos:R.ganancias;
+ $('#rs').innerHTML=`<div class="card"><div class="mut">${esc(R.mes)} · saldo actual</div><div class="big ${R.final<0?'neg':'pos'}">${fm(R.final)}</div><div class="mut">Saldo inicial ${fm(R.inicial)}</div></div><div class="seg"><button class="${rt=='gastos'?'on':''}" onclick="rtab('gastos')">Gastos</button><button class="${rt=='ganancias'?'on':''}" onclick="rtab('ganancias')">Ganancias</button></div><div class="card"><b>Total</b> <span class="mut">${fm(o.r)} de ${fm(o.p)} previsto</span>`+o.cats.map((c,i)=>{const ab=rcat==c.n,ms=ab?movs(rt,c.n):[];
+  return `<div class="row" style="display:block" onclick="rcatTog(${i})"><div style="display:flex;justify-content:space-between"><span>${ab?'▾':'▸'} ${esc(c.n)}</span><span>${fm(c.r)}</span></div><div class="mut">previsto ${fm(c.p)}</div><div class="bar"><i style="width:${Math.min(100,c.p?c.r/c.p*100:(c.r?100:0))}%"></i></div>`+(ab?(ms.length?ms.map(x=>`<div class="mv" onclick="event.stopPropagation()"><span>${x.w?'⏳ ':''}${fd(x.f)} · ${esc(x.d)||'sin descripción'}</span><b>${fm(x.m)}</b></div>`).join(''):'<div class="mut" style="padding-top:8px">Sin movimientos este mes</div>'):'')+'</div>'}).join('')+'</div>'}
 $('#gc').onclick=()=>{cfg={url:$('#u').value.trim(),t:$('#k').value.trim()};S('cfg',cfg);toast('Guardado');nav('c');cargar().then(rC);sync()};
 $('#u').value=cfg.url||'';$('#k').value=cfg.t||'';$('#f').value=hoy();rC();rH();
 if(!cfg.url)nav('x');
